@@ -10,6 +10,10 @@ const $ = (id) => document.getElementById(id);
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const STORE = 'boggle.v1';
 
+/* Affiché dans l'en-tête. Sert à vérifier d'un coup d'oeil quelle version
+   tourne réellement sur le téléphone, cache et déploiement compris. */
+const BUILD = 'v3';
+
 /* ============================== état ============================== */
 
 const state = {
@@ -293,7 +297,7 @@ function nearestCorner(p) {
 }
 
 function beginDrag(clientX, clientY) {
-  if (!state.corners || handleDots.length !== 4) return false;
+  if (!state.corners) return false;
   const p = localPoint(clientX, clientY);
   const { index, dist } = nearestCorner(p);
   if (index < 0) return false;
@@ -303,7 +307,7 @@ function beginDrag(clientX, clientY) {
   // le doigt. Au-delà, il vient se placer là où l'on a touché.
   const s = toScreen(state.corners[index], imgRect());
   grabOffset = dist <= OFFSET_LIMIT ? { x: s.x - p.x, y: s.y - p.y } : { x: 0, y: 0 };
-  handleDots[index].classList.add('is-active');
+  handleDots[index]?.classList.add('is-active');
   buzz(6);
   return true;
 }
@@ -326,47 +330,79 @@ function endDrag() {
   detachMoveListeners();
 }
 
-/* --- branchement des évènements : pointeur si disponible, tactile sinon --- */
+/* --- branchement des évènements ---
+   Sur iPhone on passe par les évènements Touch et non Pointer : un pointeur
+   tactile y est implicitement capturé par l'élément qui a reçu le pointerdown,
+   et cette capture s'est révélée capricieuse — un seul coin saisissable, une
+   seule fois. Les évènements Touch se comportent de façon prévisible.
+   La souris et le stylet continuent d'emprunter la voie Pointer, si bien que
+   les appareils hybrides (portable à écran tactile) fonctionnent des deux
+   façons. */
+const SUPPORTS_TOUCH = 'ontouchstart' in window;
+
+let activeTouch = null;
+let dragMode = null;                       // 'touch' | 'pointer'
+
+const findTouch = (list, id) => {
+  for (let i = 0; i < list.length; i++) if (list[i].identifier === id) return list[i];
+  return null;
+};
 
 const onPointerMove = (e) => { e.preventDefault(); moveDrag(e.clientX, e.clientY); };
+
 const onTouchMove = (e) => {
-  const t = e.touches[0];
+  const t = findTouch(e.changedTouches, activeTouch) || findTouch(e.touches, activeTouch);
   if (!t) return;
   e.preventDefault();
   moveDrag(t.clientX, t.clientY);
 };
 
-function attachMoveListeners() {
-  if (window.PointerEvent) {
+const onTouchEnd = (e) => {
+  if (activeTouch === null || findTouch(e.changedTouches, activeTouch)) endDrag();
+};
+
+function attachMoveListeners(mode) {
+  dragMode = mode;
+  if (mode === 'touch') {
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
+  } else {
     window.addEventListener('pointermove', onPointerMove, { passive: false });
     window.addEventListener('pointerup', endDrag);
     window.addEventListener('pointercancel', endDrag);
-  } else {
-    window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('touchend', endDrag);
-    window.addEventListener('touchcancel', endDrag);
   }
 }
 
 function detachMoveListeners() {
+  window.removeEventListener('touchmove', onTouchMove);
+  window.removeEventListener('touchend', onTouchEnd);
+  window.removeEventListener('touchcancel', onTouchEnd);
   window.removeEventListener('pointermove', onPointerMove);
   window.removeEventListener('pointerup', endDrag);
   window.removeEventListener('pointercancel', endDrag);
-  window.removeEventListener('touchmove', onTouchMove);
-  window.removeEventListener('touchend', endDrag);
-  window.removeEventListener('touchcancel', endDrag);
+  activeTouch = null;
+  dragMode = null;
 }
 
-if (window.PointerEvent) {
-  cropSvg.addEventListener('pointerdown', (e) => {
-    if (beginDrag(e.clientX, e.clientY)) { e.preventDefault(); attachMoveListeners(); }
-  });
-} else {
+if (typeof TouchEvent === 'function') {
   cropSvg.addEventListener('touchstart', (e) => {
-    const t = e.touches[0];
-    if (t && beginDrag(t.clientX, t.clientY)) { e.preventDefault(); attachMoveListeners(); }
+    if (dragging >= 0) return;                       // un seul doigt à la fois
+    const t = e.changedTouches[0];
+    if (!t || !beginDrag(t.clientX, t.clientY)) return;
+    activeTouch = t.identifier;
+    e.preventDefault();
+    attachMoveListeners('touch');
   }, { passive: false });
 }
+
+cropSvg.addEventListener('pointerdown', (e) => {
+  if (dragging >= 0) return;
+  if (e.pointerType === 'touch' && SUPPORTS_TOUCH) return;   // laissé aux évènements Touch
+  if (!beginDrag(e.clientX, e.clientY)) return;
+  e.preventDefault();
+  attachMoveListeners('pointer');
+});
 
 window.addEventListener('resize', () => { if (!cropOverlay.hidden) drawCrop(); });
 
@@ -755,6 +791,7 @@ $('randomBtn').addEventListener('click', () => {
 /* ============================== démarrage ============================== */
 
 async function boot() {
+  document.querySelector('.brand-text em').textContent = `Solveur ${BUILD}`;
   buildBoards();
   buildKeypad();
 
