@@ -12,7 +12,7 @@ const STORE = 'boggle.v1';
 
 /* Affiché dans l'en-tête. Sert à vérifier d'un coup d'oeil quelle version
    tourne réellement sur le téléphone, cache et déploiement compris. */
-const BUILD = 'v3';
+const BUILD = 'v4';
 
 /* ============================== état ============================== */
 
@@ -191,6 +191,7 @@ function openCrop() {
     drawCrop();
   };
   dragging = -1;
+  selectedCorner = -1;
   detachMoveListeners();
   cropOverlay.hidden = false;
   cropImg.src = state.imgURL;
@@ -296,12 +297,21 @@ function nearestCorner(p) {
   return { index: bestDist <= GRAB_RADIUS ? best : -1, dist: bestDist };
 }
 
+/** Coin actuellement visé ; il reste sélectionné après le relâchement. */
+let selectedCorner = -1;
+
+function selectCorner(index) {
+  selectedCorner = index;
+  handleDots.forEach((d, i) => d.classList.toggle('is-selected', i === index));
+}
+
 function beginDrag(clientX, clientY) {
   if (!state.corners) return false;
   const p = localPoint(clientX, clientY);
   const { index, dist } = nearestCorner(p);
   if (index < 0) return false;
 
+  selectCorner(index);
   dragging = index;
   // Prise précise : sous 32 px on conserve l'écart, le coin ne saute pas sous
   // le doigt. Au-delà, il vient se placer là où l'on a touché.
@@ -395,6 +405,22 @@ if (typeof TouchEvent === 'function') {
     attachMoveListeners('touch');
   }, { passive: false });
 }
+
+/* Filet de sécurité, sans aucun glissement : on touche un coin pour le viser,
+   puis on touche l'endroit exact où le poser. Un `click` est ce qu'un
+   navigateur sait produire de plus fiable. Il n'arrive ici que si aucun
+   glissement n'a démarré, donc les deux gestes ne peuvent pas se contredire. */
+cropSvg.addEventListener('click', (e) => {
+  if (!state.corners || selectedCorner < 0) return;
+  const r = imgRect();
+  const p = localPoint(e.clientX, e.clientY);
+  state.corners[selectedCorner] = {
+    x: clamp01((p.x - r.left) / r.width),
+    y: clamp01((p.y - r.top) / r.height),
+  };
+  drawCrop();
+  buzz(6);
+});
 
 cropSvg.addEventListener('pointerdown', (e) => {
   if (dragging >= 0) return;

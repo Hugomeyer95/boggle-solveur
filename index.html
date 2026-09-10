@@ -203,12 +203,16 @@
   <div class="crop-stage" id="cropStage">
     <img id="cropImg" alt="Photo de la grille">
     <svg class="crop-svg" id="cropSvg" aria-hidden="true">
+      <!-- Surface de captation : sans elle, la racine SVG n'est pas une cible
+           de survol là où elle n'a aucun remplissage, et un doigt posé hors du
+           quadrilatère touchait l'image au lieu des poignées. -->
+      <rect id="cropSurface" width="100%" height="100%"></rect>
       <polygon id="cropPoly"></polygon>
       <g id="cropGuides"></g>
       <g id="cropHandles"></g>
     </svg>
   </div>
-  <p class="crop-hint">Place chaque coin sur l'angle extérieur de la grille.</p>
+  <p class="crop-hint">Fais glisser les coins sur les angles de la grille. Tu peux aussi toucher un coin, puis l'endroit exact où le poser.</p>
 </div>
 
 <!-- ============ Écran de progression ============ -->

@@ -16,7 +16,7 @@
  * Si le dictionnaire ou les icônes venaient à changer, incrémenter
  * ASSET_CACHE : c'est la seule façon de forcer leur renouvellement.
  */
-const SHELL_CACHE = 'boggle-shell-v4';
+const SHELL_CACHE = 'boggle-shell-v5';
 const ASSET_CACHE = 'boggle-assets-v1';
 
 const SHELL = [
