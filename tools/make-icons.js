@@ -29,16 +29,67 @@ function chunk(type, data) {
   crc.writeUInt32BE(crc32(body));
   return Buffer.concat([len, body, crc]);
 }
-function encodePNG(w, h, rgba) {
-  const raw = Buffer.alloc((w * 4 + 1) * h);
+/**
+ * Filtrage adaptatif ligne par ligne (heuristique de la somme des valeurs
+ * absolues, celle que recommande la spécification PNG). Sur des dégradés,
+ * l'écart entre pixels voisins est minuscule : bien filtré, le fichier est
+ * plusieurs fois plus léger qu'avec le filtre « None ».
+ */
+function filterScanlines(raw, w, h, bpp) {
+  const stride = w * bpp;
+  const out = Buffer.alloc((stride + 1) * h);
+  let prev = Buffer.alloc(stride);
+
   for (let y = 0; y < h; y++) {
-    raw[y * (w * 4 + 1)] = 0;
-    rgba.copy(raw, y * (w * 4 + 1) + 1, y * w * 4, (y + 1) * w * 4);
+    const line = raw.subarray(y * stride, (y + 1) * stride);
+    let bestBuf = null, bestScore = Infinity, bestType = 0;
+
+    for (let type = 0; type < 5; type++) {
+      const cand = Buffer.alloc(stride);
+      let score = 0;
+      for (let i = 0; i < stride; i++) {
+        const a = i >= bpp ? line[i - bpp] : 0;      // pixel de gauche
+        const b = prev[i];                            // pixel du dessus
+        const c = i >= bpp ? prev[i - bpp] : 0;       // diagonale
+        let v;
+        if (type === 0) v = line[i];
+        else if (type === 1) v = line[i] - a;
+        else if (type === 2) v = line[i] - b;
+        else if (type === 3) v = line[i] - ((a + b) >> 1);
+        else {
+          const p = a + b - c;
+          const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+          v = line[i] - (pa <= pb && pa <= pc ? a : pb <= pc ? b : c);
+        }
+        const byte = v & 0xff;
+        cand[i] = byte;
+        score += byte < 128 ? byte : 256 - byte;
+      }
+      if (score < bestScore) { bestScore = score; bestBuf = cand; bestType = type; }
+    }
+
+    out[y * (stride + 1)] = bestType;
+    bestBuf.copy(out, y * (stride + 1) + 1);
+    prev = line;
   }
+  return out;
+}
+
+/** Encode en PNG RGB (les icônes sont opaques : le canal alpha est inutile). */
+function encodePNG(w, h, rgba) {
+  const bpp = 3;
+  const rgb = Buffer.alloc(w * h * bpp);
+  for (let i = 0, o = 0; i < w * h; i++) {
+    rgb[o++] = rgba[i * 4];
+    rgb[o++] = rgba[i * 4 + 1];
+    rgb[o++] = rgba[i * 4 + 2];
+  }
+  const raw = filterScanlines(rgb, w, h, bpp);
+
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(w, 0);
   ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;  // 8 bits, RGB
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),

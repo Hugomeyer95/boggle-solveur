@@ -7,9 +7,25 @@
   command = "node tools/build-site.js"
   publish = "publier"
 
-# Le script du service worker et la page d'accueil doivent toujours être
-# revalidés, sinon une mise à jour peut mettre longtemps à parvenir aux
-# téléphones qui ont déjà installé l'app.
+  # Économie de minutes de build : si le push ne touche aucun fichier publié
+  # (README, scripts .bat, notes...), le déploiement est purement et simplement
+  # sauté. `git diff --quiet` sort avec 0 quand rien n'a changé, et un code 0
+  # signifie « ignorer ce build » pour Netlify.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- index.html styles.css sw.js manifest.webmanifest js assets tools/build-site.js netlify.toml"
+
+# Le dictionnaire et les icônes ne changent jamais : on autorise le navigateur
+# à les garder un an sans même revalider. C'est ce qui supprime le plus de
+# requêtes — après la première visite, plus rien n'est redemandé.
+# Si l'un de ces fichiers change un jour, incrémenter ASSET_CACHE dans sw.js.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# À l'inverse, le script du service worker et la page d'accueil doivent
+# toujours être revalidés, sinon une mise à jour mettrait longtemps à parvenir
+# aux téléphones ayant déjà installé l'app. Une revalidation ne transfère que
+# des en-têtes (réponse 304), le coût est négligeable.
 [[headers]]
   for = "/sw.js"
   [headers.values]
@@ -17,5 +33,17 @@
 
 [[headers]]
   for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Le code de l'app est revalidé lui aussi, mais le service worker le sert
+# depuis son cache : l'utilisateur n'attend jamais le réseau.
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/styles.css"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
