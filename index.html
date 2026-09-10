@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Boggle — Solveur</title>
+<meta name="description" content="Photographie ta grille de Boggle, obtiens tous les mots français et leur tracé.">
+<meta name="theme-color" content="#07070c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Boggle">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="icon" href="assets/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ Fond animé ============ -->
+<div class="aurora" aria-hidden="true">
+  <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+</div>
+
+<!-- ============ En-tête ============ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-text">Boggle<em>Solveur</em></span>
+  </div>
+  <div class="pill" id="dictBadge" hidden><span class="dot"></span><span id="dictBadgeText">Dictionnaire</span></div>
+</header>
+
+<main id="main">
+
+  <!-- ==================== VUE : GRILLE ==================== -->
+  <section class="view is-active" id="view-grid">
+    <div class="stack">
+
+      <div class="card grid-card">
+        <div class="card-head">
+          <h2>La grille</h2>
+          <button class="ghost-btn" id="clearGrid" type="button">Vider</button>
+        </div>
+
+        <div class="board-wrap">
+          <div class="board" id="board" role="group" aria-label="Grille de 4 sur 4"></div>
+        </div>
+
+        <p class="hint" id="gridHint">Touche une case pour saisir une lettre, ou photographie ta grille.</p>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="solveBtn" type="button" disabled>
+          <span class="btn-label">Trouver les mots</span>
+          <span class="btn-sub" id="solveSub">Complète les 16 cases</span>
+        </button>
+        <div class="actions-row">
+          <button class="btn btn-glass" id="cameraBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.2a1 1 0 0 0 .83-.45l.74-1.1A1 1 0 0 1 10.1 4h3.8a1 1 0 0 1 .83.45l.74 1.1a1 1 0 0 0 .83.45h1.2A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z"/><circle cx="12" cy="12.5" r="3.4"/></svg>
+            Photo
+          </button>
+          <button class="btn btn-glass" id="galleryBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="3"/><circle cx="9" cy="10" r="1.7"/><path d="M4 16.5 9 12l3.5 3 2.5-2 5 4.2"/></svg>
+            Galerie
+          </button>
+          <button class="btn btn-glass" id="randomBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.4"/><circle cx="15" cy="15" r="1.4"/><circle cx="15" cy="9" r="1.4"/><circle cx="9" cy="15" r="1.4"/></svg>
+            Exemple
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ==================== VUE : MOTS ==================== -->
+  <section class="view" id="view-words">
+    <div class="stack">
+
+      <div class="card summary" id="summary" hidden>
+        <div class="stat"><b id="statWords">0</b><span>mots</span></div>
+        <div class="stat"><b id="statScore">0</b><span>points</span></div>
+        <div class="stat"><b id="statBest">—</b><span>le plus long</span></div>
+      </div>
+
+      <div class="filters" id="filters" hidden>
+        <div class="seg" role="group" aria-label="Type de mots">
+          <button class="seg-item is-on" data-mode="nouns" type="button">Noms communs</button>
+          <button class="seg-item" data-mode="all" type="button">Tous les mots</button>
+        </div>
+        <div class="chips" aria-label="Longueur minimale">
+          <button class="chip" data-min="3" type="button">3+</button>
+          <button class="chip is-on" data-min="4" type="button">4+</button>
+          <button class="chip" data-min="5" type="button">5+</button>
+          <button class="chip" data-min="6" type="button">6+</button>
+        </div>
+      </div>
+
+      <div id="wordsHost" class="words-host">
+        <div class="empty" id="wordsEmpty">
+          <div class="empty-art" aria-hidden="true"></div>
+          <h3>Aucun résultat pour l'instant</h3>
+          <p>Renseigne une grille puis lance la recherche.</p>
+          <button class="btn btn-glass" data-goto="grid" type="button">Aller à la grille</button>
+        </div>
+      </div>
+
+      <div class="veil" id="wordsVeil" hidden>
+        <div class="veil-inner">
+          <h3>Partie en cours</h3>
+          <p>Les solutions restent masquées tant que le minuteur tourne.</p>
+          <button class="btn btn-glass" id="revealBtn" type="button">Révéler quand même</button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ==================== VUE : MINUTEUR ==================== -->
+  <section class="view" id="view-timer">
+    <div class="stack">
+      <div class="card timer-card">
+        <div class="ring-wrap">
+          <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
+            <defs>
+              <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#7c5cff"/><stop offset="55%" stop-color="#ff4d8d"/><stop offset="100%" stop-color="#ffb259"/>
+              </linearGradient>
+            </defs>
+            <circle class="ring-bg" cx="100" cy="100" r="88"/>
+            <circle class="ring-fg" cx="100" cy="100" r="88"/>
+          </svg>
+          <div class="ring-center">
+            <div class="time" id="timeDisplay" role="timer">03:00</div>
+            <div class="time-sub" id="timeSub">durée de la manche</div>
+          </div>
+        </div>
+
+        <div class="chips presets" id="presets" aria-label="Durées prédéfinies">
+          <button class="chip" data-sec="60" type="button">1 min</button>
+          <button class="chip" data-sec="120" type="button">2 min</button>
+          <button class="chip is-on" data-sec="180" type="button">3 min</button>
+          <button class="chip" data-sec="240" type="button">4 min</button>
+          <button class="chip" data-sec="300" type="button">5 min</button>
+        </div>
+
+        <div class="stepper">
+          <button class="step-btn" id="minus" type="button" aria-label="Réduire de 15 secondes">–</button>
+          <span class="step-label">ajuster par 15 s</span>
+          <button class="step-btn" id="plus" type="button" aria-label="Ajouter 15 secondes">+</button>
+        </div>
+
+        <div class="timer-actions">
+          <button class="btn btn-primary" id="startBtn" type="button"><span class="btn-label">Démarrer</span></button>
+          <button class="btn btn-glass" id="resetBtn" type="button">Réinitialiser</button>
+        </div>
+
+        <label class="switch">
+          <input type="checkbox" id="hideWords" checked>
+          <span class="track" aria-hidden="true"><span class="knob"></span></span>
+          <span class="switch-text">Masquer les solutions pendant la manche</span>
+        </label>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ Barre d'onglets ============ -->
+<nav class="tabbar" aria-label="Navigation">
+  <button class="tab is-on" data-view="grid" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="4.5"/><path d="M9.3 3.5v17M14.7 3.5v17M3.5 9.3h17M3.5 14.7h17"/></svg>
+    <span>Grille</span>
+  </button>
+  <button class="tab" data-view="words" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5h14M5 10h10M5 14.5h14M5 19h7"/></svg>
+    <span>Mots</span>
+    <i class="badge" id="tabBadge" hidden>0</i>
+  </button>
+  <button class="tab" data-view="timer" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4.2l2.6 1.8M9.3 2.8h5.4"/></svg>
+    <span>Minuteur</span>
+  </button>
+</nav>
+
+<!-- ============ Clavier de saisie ============ -->
+<div class="keypad" id="keypad" hidden>
+  <div class="keypad-head">
+    <span id="keypadTitle">Case 1</span>
+    <button class="ghost-btn" id="keypadDone" type="button">Terminé</button>
+  </div>
+  <div class="keys" id="keys"></div>
+</div>
+
+<!-- ============ Cadrage de la photo ============ -->
+<div class="overlay crop" id="cropOverlay" hidden>
+  <div class="crop-head">
+    <button class="ghost-btn" id="cropCancel" type="button">Annuler</button>
+    <span>Ajuste les 4 coins</span>
+    <button class="ghost-btn strong" id="cropOk" type="button">Analyser</button>
+  </div>
+  <div class="crop-stage" id="cropStage">
+    <img id="cropImg" alt="Photo de la grille">
+    <svg class="crop-svg" id="cropSvg" aria-hidden="true">
+      <polygon id="cropPoly"></polygon>
+      <g id="cropGuides"></g>
+      <g id="cropHandles"></g>
+    </svg>
+  </div>
+  <p class="crop-hint">Place chaque coin sur l'angle extérieur de la grille.</p>
+</div>
+
+<!-- ============ Écran de progression ============ -->
+<div class="overlay busy" id="busy" hidden>
+  <div class="busy-card">
+    <div class="spinner" aria-hidden="true"><i></i><i></i><i></i></div>
+    <h3 id="busyTitle">Lecture de la grille</h3>
+    <p id="busyText">Préparation…</p>
+    <div class="bar"><span id="busyBar"></span></div>
+  </div>
+</div>
+
+<!-- ============ Fiche « chemin du mot » ============ -->
+<div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="Tracé du mot">
+  <div class="sheet-grab" aria-hidden="true"></div>
+  <div class="sheet-head">
+    <div>
+      <h3 id="sheetWord">MOT</h3>
+      <p id="sheetMeta">4 lettres</p>
+    </div>
+    <button class="icon-btn" id="sheetClose" type="button" aria-label="Fermer">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="board-wrap sheet-board-wrap">
+    <div class="board board-sm" id="pathBoard"></div>
+    <svg class="path-svg" id="pathSvg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="pathGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#7c5cff"/><stop offset="100%" stop-color="#ff4d8d"/>
+        </linearGradient>
+      </defs>
+      <polyline id="pathLine"></polyline>
+    </svg>
+  </div>
+  <div class="sheet-foot">
+    <button class="icon-btn" id="prevPath" type="button" aria-label="Chemin précédent">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>
+    </button>
+    <span id="pathCount">chemin 1 / 1</span>
+    <button class="icon-btn" id="nextPath" type="button" aria-label="Chemin suivant">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ============ Notifications ============ -->
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<input type="file" id="fileCamera" accept="image/*" capture="environment" hidden>
+<input type="file" id="fileGallery" accept="image/*" hidden>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

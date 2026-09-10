@@ -1,0 +1,7 @@
+# Dossier construit par tools/build-site.js : Netlify le régénère à chaque déploiement
+publier/
+
+# Outils
+node_modules/
+.netlify/
+*.log

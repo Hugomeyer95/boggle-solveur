@@ -1,0 +1,21 @@
+# Configuration de déploiement.
+#
+# Netlify exécute la commande ci-dessous à chaque push sur GitHub, puis publie
+# le contenu de publier/. Ce dossier n'a donc pas besoin d'être versionné.
+
+[build]
+  command = "node tools/build-site.js"
+  publish = "publier"
+
+# Le script du service worker et la page d'accueil doivent toujours être
+# revalidés, sinon une mise à jour peut mettre longtemps à parvenir aux
+# téléphones qui ont déjà installé l'app.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
