@@ -463,12 +463,17 @@ h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.02em; }
   padding: calc(var(--safe-t) + 14px) 18px 12px;
   font-size: 14px; color: var(--ink-2);
 }
-.crop-stage { flex: 1; position: relative; margin: 0 12px; min-height: 0; display: grid; place-items: center; }
+.crop-stage { flex: 1; position: relative; margin: 0 18px; min-height: 0; display: grid; place-items: center; }
 .crop-stage img { max-width: 100%; max-height: 100%; border-radius: 16px; display: block; }
-.crop-svg { position: absolute; inset: 0; overflow: visible; touch-action: none; }
+/* touch-action n'est pas héritée : sans la règle sur les descendants, iOS
+   traitait le contact sur une poignée comme un début de défilement et
+   annulait le pointeur. */
+.crop-svg, .crop-svg * { touch-action: none; }
+.crop-svg { position: absolute; inset: 0; overflow: visible; }
 #cropPoly { fill: rgba(124, 92, 255, .12); stroke: #fff; stroke-width: 2; stroke-linejoin: round; }
 #cropGuides line { stroke: rgba(255, 255, 255, .35); stroke-width: 1; stroke-dasharray: 4 5; }
 .handle { fill: #fff; stroke: var(--a2); stroke-width: 3; }
+.handle.is-active { stroke-width: 6; filter: drop-shadow(0 0 12px var(--a2)); }
 .crop-hint { flex: none; text-align: center; font-size: 13px; color: var(--ink-3); padding: 14px 24px calc(var(--safe-b) + 16px); margin: 0; }
 
 .busy { align-items: center; justify-content: center; padding: 30px; }

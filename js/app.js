@@ -187,7 +187,7 @@ function openCrop() {
     drawCrop();
   };
   dragging = -1;
-  activePointer = null;
+  detachMoveListeners();
   cropOverlay.hidden = false;
   cropImg.src = state.imgURL;
   if (cropImg.complete && cropImg.naturalWidth) requestAnimationFrame(() => cropImg.onload());
@@ -229,7 +229,7 @@ function buildCropShapes() {
   }
   for (let i = 0; i < 4; i++) {
     const dot = document.createElementNS(NS, 'circle');
-    dot.setAttribute('r', 11);
+    dot.setAttribute('r', 13);
     dot.setAttribute('class', 'handle');
     handles.appendChild(dot);
     handleDots.push(dot);
@@ -259,22 +259,28 @@ function drawCrop() {
   });
 }
 
-/* On identifie le coin par sa distance au doigt, et non par l'élément touché :
-   Safari garde parfois la capture de pointeur accrochée au SVG, et `e.target`
-   ne désignait alors plus jamais une poignée — plus aucun coin ne bougeait. */
+/* Saisie des coins.
+   Trois précautions, apprises à la dure :
+   - le coin est désigné par sa distance au doigt, jamais par l'élément touché ;
+   - les mouvements sont écoutés sur `window`, donc le geste survit même si le
+     SVG perd le pointeur — plus besoin de setPointerCapture, qui restait
+     accroché sous Safari et gelait tout ;
+   - large rayon de saisie : viser juste à côté d'un coin suffit. */
+const GRAB_RADIUS = 100;   // px — on attrape un coin même en visant large
+const OFFSET_LIMIT = 32;   // px — en deçà, on garde l'écart doigt/coin
+
 let dragging = -1;
-let activePointer = null;
 let grabOffset = { x: 0, y: 0 };
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
-/** Position du doigt dans le repère du SVG. */
-function localPoint(e) {
+/** Coordonnées du doigt dans le repère du SVG. */
+function localPoint(clientX, clientY) {
   const box = cropSvg.getBoundingClientRect();
-  return { x: e.clientX - box.left, y: e.clientY - box.top };
+  return { x: clientX - box.left, y: clientY - box.top };
 }
 
-/** Coin le plus proche du point touché, ou -1 si l'on est trop loin. */
+/** Coin le plus proche, avec sa distance. */
 function nearestCorner(p) {
   const r = imgRect();
   let best = -1, bestDist = Infinity;
@@ -283,52 +289,84 @@ function nearestCorner(p) {
     const d = Math.hypot(s.x - p.x, s.y - p.y);
     if (d < bestDist) { bestDist = d; best = i; }
   });
-  return { index: bestDist <= 70 ? best : -1, dist: bestDist };
+  return { index: bestDist <= GRAB_RADIUS ? best : -1, dist: bestDist };
 }
 
-cropSvg.addEventListener('pointerdown', (e) => {
-  if (!state.corners) return;
-  const p = localPoint(e);
+function beginDrag(clientX, clientY) {
+  if (!state.corners || handleDots.length !== 4) return false;
+  const p = localPoint(clientX, clientY);
   const { index, dist } = nearestCorner(p);
-  if (index < 0) return;
+  if (index < 0) return false;
 
   dragging = index;
-  activePointer = e.pointerId;
-  // Prise « à la volée » : sous 28 px on conserve l'écart doigt/coin, ce qui
-  // permet un placement précis ; au-delà, le coin rejoint le doigt.
+  // Prise précise : sous 32 px on conserve l'écart, le coin ne saute pas sous
+  // le doigt. Au-delà, il vient se placer là où l'on a touché.
   const s = toScreen(state.corners[index], imgRect());
-  grabOffset = dist <= 28 ? { x: s.x - p.x, y: s.y - p.y } : { x: 0, y: 0 };
-
-  e.preventDefault();
-  try { cropSvg.setPointerCapture(e.pointerId); } catch { /* capture indisponible */ }
+  grabOffset = dist <= OFFSET_LIMIT ? { x: s.x - p.x, y: s.y - p.y } : { x: 0, y: 0 };
+  handleDots[index].classList.add('is-active');
   buzz(6);
-});
+  return true;
+}
 
-cropSvg.addEventListener('pointermove', (e) => {
-  if (dragging < 0 || (activePointer !== null && e.pointerId !== activePointer)) return;
-  e.preventDefault();
+function moveDrag(clientX, clientY) {
+  if (dragging < 0) return;
   const r = imgRect();
-  const p = localPoint(e);
+  const p = localPoint(clientX, clientY);
   state.corners[dragging] = {
     x: clamp01((p.x + grabOffset.x - r.left) / r.width),
     y: clamp01((p.y + grabOffset.y - r.top) / r.height),
   };
   drawCrop();
-});
-
-function endDrag(e) {
-  if (dragging < 0) return;
-  dragging = -1;
-  activePointer = null;
-  // Libération explicite : sans cela la capture pouvait rester accrochée.
-  try {
-    if (e && cropSvg.hasPointerCapture?.(e.pointerId)) cropSvg.releasePointerCapture(e.pointerId);
-  } catch { /* déjà libérée */ }
 }
 
-cropSvg.addEventListener('pointerup', endDrag);
-cropSvg.addEventListener('pointercancel', endDrag);
-cropSvg.addEventListener('lostpointercapture', endDrag);
+function endDrag() {
+  if (dragging < 0) return;
+  handleDots[dragging]?.classList.remove('is-active');
+  dragging = -1;
+  detachMoveListeners();
+}
+
+/* --- branchement des évènements : pointeur si disponible, tactile sinon --- */
+
+const onPointerMove = (e) => { e.preventDefault(); moveDrag(e.clientX, e.clientY); };
+const onTouchMove = (e) => {
+  const t = e.touches[0];
+  if (!t) return;
+  e.preventDefault();
+  moveDrag(t.clientX, t.clientY);
+};
+
+function attachMoveListeners() {
+  if (window.PointerEvent) {
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+  } else {
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', endDrag);
+    window.addEventListener('touchcancel', endDrag);
+  }
+}
+
+function detachMoveListeners() {
+  window.removeEventListener('pointermove', onPointerMove);
+  window.removeEventListener('pointerup', endDrag);
+  window.removeEventListener('pointercancel', endDrag);
+  window.removeEventListener('touchmove', onTouchMove);
+  window.removeEventListener('touchend', endDrag);
+  window.removeEventListener('touchcancel', endDrag);
+}
+
+if (window.PointerEvent) {
+  cropSvg.addEventListener('pointerdown', (e) => {
+    if (beginDrag(e.clientX, e.clientY)) { e.preventDefault(); attachMoveListeners(); }
+  });
+} else {
+  cropSvg.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    if (t && beginDrag(t.clientX, t.clientY)) { e.preventDefault(); attachMoveListeners(); }
+  }, { passive: false });
+}
 
 window.addEventListener('resize', () => { if (!cropOverlay.hidden) drawCrop(); });
 
